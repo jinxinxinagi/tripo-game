@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>云朵水乡 · 小猫飞行记</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; background:#7ec8f2; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  /* HUD */
+  .hud { position:fixed; top:18px; left:20px; z-index:10; display:flex; gap:14px; align-items:center; pointer-events:none; }
+  .pill { background:rgba(255,255,255,.82); backdrop-filter:blur(6px); border-radius:999px; padding:8px 16px;
+          font-size:15px; font-weight:600; color:#1d4e6b; box-shadow:0 4px 14px rgba(30,90,140,.18); display:flex; align-items:center; gap:7px; }
+  .pill .dot { width:10px; height:10px; border-radius:50%; }
+  .leaf-dot { background:#59c257; }
+  .heart-dot { background:#ff6b81; }
+  .progress-dot { background:#3aa7e8; }
+
+  #hint { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:10; color:#fff;
+          background:rgba(20,60,90,.45); backdrop-filter:blur(6px); padding:9px 18px; border-radius:12px; font-size:14px;
+          letter-spacing:.03em; pointer-events:none; transition:opacity 1s; text-shadow:0 1px 2px rgba(0,0,0,.2); }
+
+  /* start / end overlays */
+  .overlay { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center;
+             background:radial-gradient(ellipse at 50% 35%, rgba(160,220,250,.55), rgba(70,140,200,.75));
+             backdrop-filter:blur(4px); transition:opacity .5s; }
+  .overlay.hidden { opacity:0; pointer-events:none; }
+  .panel { text-align:center; color:#fff; padding:0 24px; max-width:640px; }
+  .panel h1 { font-size:clamp(34px,6vw,56px); font-weight:800; letter-spacing:.06em; text-shadow:0 4px 18px rgba(20,80,130,.4); margin-bottom:14px; }
+  .panel p { font-size:clamp(15px,2.2vw,18px); line-height:1.9; opacity:.95; text-shadow:0 1px 3px rgba(20,80,130,.35); margin-bottom:26px; }
+  .panel .keys { display:inline-flex; gap:10px; margin-bottom:28px; flex-wrap:wrap; justify-content:center; }
+  .key { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35); border-radius:10px;
+         padding:7px 13px; font-size:14px; font-weight:600; }
+  .btn { display:inline-block; background:#ffb93e; color:#5b3a0e; font-size:18px; font-weight:800; letter-spacing:.08em;
+         padding:15px 46px; border:none; border-radius:999px; cursor:pointer; box-shadow:0 8px 24px rgba(180,110,10,.4), inset 0 -3px 0 rgba(0,0,0,.12);
+         transition:transform .15s, box-shadow .15s; }
+  .btn:hover { transform:translateY(-2px) scale(1.03); box-shadow:0 12px 30px rgba(180,110,10,.5), inset 0 -3px 0 rgba(0,0,0,.12); }
+  .btn:active { transform:translateY(1px) scale(.98); }
+
+  #loading { position:fixed; top:18px; right:20px; z-index:11; color:#fff; font-size:13px; background:rgba(20,60,90,.4);
+             padding:7px 14px; border-radius:999px; backdrop-filter:blur(6px); opacity:0; transition:opacity .3s; pointer-events:none; }
+  #loading.show { opacity:1; }
+  .spin { display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
+          border-radius:50%; animation:sp 1s linear infinite; margin-right:7px; vertical-align:-1px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+
+  /* touch controls */
+  #touch { position:fixed; inset:0; z-index:9; display:none; pointer-events:none; }
+  body.touch-mode #touch { display:block; }
+  .stick-zone { position:absolute; left:4vw; bottom:6vh; width:130px; height:130px; pointer-events:auto; }
+  .stick-base { position:absolute; inset:0; border-radius:50%; background:rgba(255,255,255,.18); border:2px solid rgba(255,255,255,.4); }
+  .stick-nub { position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%;
+               background:rgba(255,255,255,.75); box-shadow:0 4px 12px rgba(0,0,0,.2); }
+  .jump-btn { position:absolute; right:5vw; bottom:7vh; width:86px; height:86px; border-radius:50%; pointer-events:auto;
+              background:rgba(255,185,62,.92); border:none; color:#5b3a0e; font-size:17px; font-weight:800;
+              box-shadow:0 6px 20px rgba(180,110,10,.4), inset 0 -4px 0 rgba(0,0,0,.12); }
+  .jump-btn:active { transform:scale(.94); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="hud">
+  <div class="pill"><span class="dot leaf-dot"></span>叶子 <span id="score">0</span>/<span id="total">0</span></div>
+  <div class="pill"><span class="dot heart-dot"></span>生命 <span id="lives">3</span></div>
+</div>
+<div id="loading"><span class="spin"></span>模型加载中…</div>
+<div id="hint">WASD / 方向键移动 · 空格跳跃 · 收集绿叶，抵达终点宝塔</div>
+
+<div id="touch">
+  <div class="stick-zone" id="stickZone"><div class="stick-base"></div><div class="stick-nub" id="stickNub"></div></div>
+  <button class="jump-btn" id="jumpBtn">跳</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <div class="panel">
+    <h1>云朵水乡 · 小猫飞行记</h1>
+    <p>乘坐神奇的绿叶，穿过江南水乡的天空。<br>收集飘散的叶子，落在浮岛上休整，最后抵达石拱桥后的宝塔。</p>
+    <div class="keys"><span class="key">WASD / 方向键 移动</span><span class="key">空格 跳跃</span><span class="key">R 重来</span></div>
+    <br><button class="btn" id="startBtn">开始游戏</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+  <div class="panel">
+    <h1 id="endTitle">通关啦！</h1>
+    <p id="endText"></p>
+    <button class="btn" id="restartBtn">再玩一次</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "./node_modules/three/build/three.module.js",
+    "three/addons/": "./node_modules/three/examples/jsm/"
+} }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
